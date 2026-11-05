@@ -1,0 +1,26 @@
+# Ignore dependencies and build artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore environment credentials
+.env
+.env.*
+!.env.example
+
+# Ignore git and IDE files
+.git/
+.gitignore
+.DS_Store
+.idea/
+.vscode/
+
+# Ignore test suites and temporary files
+src/tests/
+*.test.js
+*.spec.js
+coverage/
+.temp/
+*.log
+

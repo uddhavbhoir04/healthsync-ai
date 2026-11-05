@@ -1,0 +1,100 @@
+services:
+  # ----------------------------------------------------------------------------
+  # 1. MySQL 8 Database
+  # ----------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: healthsync-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: healthsync_db
+      MYSQL_USER: healthsync_user
+      MYSQL_PASSWORD: healthsync_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis Caching & BullMQ Queue Store
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: healthsync-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 3. HealthSync AI Backend (Node.js 22 + Express 5)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: healthsync-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      # Database Connection (Connects to container hostname 'mysql')
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: healthsync_db
+      DB_USER: healthsync_user
+      DB_PASSWORD: healthsync_pass
+      DB_SSL: "false"
+
+      # Redis / BullMQ Connection (Connects to container hostname 'redis')
+      REDIS_URL: redis://redis:6379
+
+      # Security & Authentication
+      JWT_ACCESS_SECRET: local_docker_jwt_access_secret_32_characters_minimum
+      JWT_REFRESH_SECRET: local_docker_jwt_refresh_secret_32_characters_minimum
+      FRONTEND_URL: http://localhost:3000
+
+      # Embedded Worker Flag (Runs workers alongside API in local container)
+      ENABLE_EMBEDDED_WORKER: "true"
+
+      # Payment & Third-Party Mock Defaults for Local Testing
+      RAZORPAY_KEY_ID: rzp_test_mock_id
+      RAZORPAY_KEY_SECRET: mock_razorpay_secret_key
+      RAZORPAY_WEBHOOK_SECRET: mock_webhook_secret
+      EMAIL_PROVIDER: resend
+      EMAIL_FROM: onboarding@resend.dev
+      NOTIFICATION_EMAIL_ENABLED: "true"
+      NOTIFICATION_PUSH_ENABLED: "false"
+      NOTIFICATION_SMS_ENABLED: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
